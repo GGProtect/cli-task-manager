@@ -17,6 +17,9 @@ htmlcov/
 # Local environment variables
 .env
 
+# Local application data
+data/*.db
+
 # IDE settings
 .idea/
 .vscode/
