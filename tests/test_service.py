@@ -3,6 +3,7 @@ from pathlib import Path
 
 import pytest
 
+from task_manager.models import Task
 from task_manager.service import TaskService
 from task_manager.storage import SQLiteTaskStorage
 
@@ -97,3 +98,97 @@ def test_delete_task_returns_false_for_unknown_id(tmp_path: Path) -> None:
     service = _create_service(tmp_path)
 
     assert service.delete_task(999) is False
+
+
+def test_filter_tasks_by_status(tmp_path: Path) -> None:
+    service = _create_service(tmp_path)
+    todo_task = service.create_task(title="Todo task")
+    in_progress_task = service.create_task(title="In progress task")
+    service.change_task_status(in_progress_task.id, "in_progress")
+
+    filtered_tasks = service.filter_tasks(status="todo")
+
+    assert filtered_tasks == [todo_task]
+
+
+def test_filter_tasks_by_priority(tmp_path: Path) -> None:
+    service = _create_service(tmp_path)
+    low_priority_task = service.create_task(title="Low priority task", priority=1)
+    high_priority_task = service.create_task(title="High priority task", priority=5)
+
+    filtered_tasks = service.filter_tasks(priority=5)
+
+    assert filtered_tasks == [high_priority_task]
+    assert low_priority_task not in filtered_tasks
+
+
+def test_filter_tasks_returns_only_overdue_tasks(tmp_path: Path) -> None:
+    service = _create_service(tmp_path)
+    overdue_task = Task(
+        title="Overdue task",
+        deadline=date.today() - timedelta(days=1),
+    )
+    service.storage.save_task(overdue_task)
+    service.create_task(
+        title="Future task",
+        deadline=date.today() + timedelta(days=1),
+    )
+
+    filtered_tasks = service.filter_tasks(only_overdue=True)
+
+    assert filtered_tasks == [overdue_task]
+
+
+def test_filter_tasks_by_deadline_presence(tmp_path: Path) -> None:
+    service = _create_service(tmp_path)
+    task_without_deadline = service.create_task(title="Task without deadline")
+    task_with_deadline = service.create_task(
+        title="Task with deadline",
+        deadline=date.today() + timedelta(days=1),
+    )
+
+    tasks_with_deadline = service.filter_tasks(has_deadline=True)
+    tasks_without_deadline = service.filter_tasks(has_deadline=False)
+
+    assert tasks_with_deadline == [task_with_deadline]
+    assert tasks_without_deadline == [task_without_deadline]
+
+
+def test_filter_tasks_combines_multiple_conditions(tmp_path: Path) -> None:
+    service = _create_service(tmp_path)
+    matching_task = Task(
+        title="Matching task",
+        priority=3,
+        deadline=date.today() - timedelta(days=1),
+    )
+    service.storage.save_task(matching_task)
+    service.create_task(title="Different priority", priority=1)
+    service.create_task(
+        title="Future deadline",
+        priority=3,
+        deadline=date.today() + timedelta(days=1),
+    )
+
+    filtered_tasks = service.filter_tasks(
+        status="todo",
+        priority=3,
+        only_overdue=True,
+        has_deadline=True,
+    )
+
+    assert filtered_tasks == [matching_task]
+
+
+def test_filter_tasks_rejects_invalid_status(tmp_path: Path) -> None:
+    service = _create_service(tmp_path)
+
+    with pytest.raises(ValueError):
+        service.filter_tasks(status="cancelled")
+
+
+@pytest.mark.parametrize("priority", [0, 6])
+def test_filter_tasks_rejects_invalid_priority(tmp_path: Path, priority: int) -> None:
+    service = _create_service(tmp_path)
+
+    with pytest.raises(ValueError):
+        service.filter_tasks(priority=priority)
