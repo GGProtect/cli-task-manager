@@ -1,4 +1,4 @@
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -192,3 +192,74 @@ def test_filter_tasks_rejects_invalid_priority(tmp_path: Path, priority: int) ->
 
     with pytest.raises(ValueError):
         service.filter_tasks(priority=priority)
+
+
+def test_sort_tasks_by_priority_keeps_tasks_without_priority_at_end(
+    tmp_path: Path,
+) -> None:
+    service = _create_service(tmp_path)
+    task_without_priority = service.create_task(title="No priority")
+    low_priority_task = service.create_task(title="Low priority", priority=1)
+    high_priority_task = service.create_task(title="High priority", priority=5)
+
+    ascending_tasks = service.sort_tasks("priority")
+    descending_tasks = service.sort_tasks("priority", descending=True)
+
+    assert ascending_tasks == [
+        low_priority_task,
+        high_priority_task,
+        task_without_priority,
+    ]
+    assert descending_tasks == [
+        high_priority_task,
+        low_priority_task,
+        task_without_priority,
+    ]
+
+
+def test_sort_tasks_by_deadline_keeps_tasks_without_deadline_at_end(
+    tmp_path: Path,
+) -> None:
+    service = _create_service(tmp_path)
+    task_without_deadline = service.create_task(title="No deadline")
+    earlier_task = service.create_task(
+        title="Earlier deadline",
+        deadline=date.today() + timedelta(days=1),
+    )
+    later_task = service.create_task(
+        title="Later deadline",
+        deadline=date.today() + timedelta(days=2),
+    )
+
+    ascending_tasks = service.sort_tasks("deadline")
+    descending_tasks = service.sort_tasks("deadline", descending=True)
+
+    assert ascending_tasks == [earlier_task, later_task, task_without_deadline]
+    assert descending_tasks == [later_task, earlier_task, task_without_deadline]
+
+
+def test_sort_tasks_by_created_at_in_both_directions(tmp_path: Path) -> None:
+    service = _create_service(tmp_path)
+    earlier_task = Task(
+        title="Earlier task",
+        created_at=datetime(2026, 1, 1, 10, 0, 0),
+    )
+    later_task = Task(
+        title="Later task",
+        created_at=datetime(2026, 1, 1, 11, 0, 0),
+    )
+    service.storage.save_task(later_task)
+    service.storage.save_task(earlier_task)
+
+    ascending_tasks = service.sort_tasks("created_at")
+    descending_tasks = service.sort_tasks("created_at", descending=True)
+
+    assert ascending_tasks == [earlier_task, later_task]
+    assert descending_tasks == [later_task, earlier_task]
+
+
+def test_sort_tasks_rejects_invalid_sort_field(tmp_path: Path) -> None:
+    service = _create_service(tmp_path)
+
+    with pytest.raises(ValueError):
+        service.sort_tasks("title")

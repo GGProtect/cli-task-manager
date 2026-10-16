@@ -66,3 +66,23 @@ class TaskService:
                 filtered_tasks.append(task)
 
         return filtered_tasks
+
+    def sort_tasks(self, sort_by: str, descending: bool = False) -> list[Task]:
+        if sort_by not in ("priority", "deadline", "created_at"):
+            raise ValueError("Invalid sort field")
+
+        tasks = self.get_tasks()
+        tasks_with_value = [
+            task for task in tasks if getattr(task, sort_by) is not None
+        ]
+        tasks_without_value = [
+            task for task in tasks if getattr(task, sort_by) is None
+        ]
+
+        sorted_tasks = sorted(
+            tasks_with_value,
+            key=lambda task: getattr(task, sort_by),
+            reverse=descending,
+        )
+
+        return sorted_tasks + tasks_without_value
